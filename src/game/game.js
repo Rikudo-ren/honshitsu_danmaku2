@@ -300,10 +300,18 @@ class Game {
     }
   }
 
+  /** 章の基本配色。フェーズごとの配色は phaseRamp() が返す。 */
   pickRamp() {
     const T = window.HN.STAGE_THEME;
     const t = T['stage' + G.stage.id];
     return (t && t.main) ? t.main : window.HN.RAMP.navy;
+  }
+
+  /** フェーズ i の配色（無ければ章の基本配色） */
+  phaseRamp(i) {
+    const PA = window.HN.PHASE_ACCENT;
+    const list = PA && PA[G.stage.id];
+    return (list && list[i]) ? list[i] : this.pickRamp();
   }
 
   /* ==================================================== フェーズ制御 == */
@@ -337,7 +345,15 @@ class Game {
         at: L.at, until: L.until, started: false, layer: L,
       });
     }
+    /* ---- フェーズ固有の配色とボスの形態 ----
+     * フェーズが進むごとに、ボスの色・後光・装飾が変わる。
+     * 「同じ人物が、段階を踏んで✝本質✝へ近づいていく」ことを
+     * 色と形で示すのが狙い（弾幕の色もこれに合わせる）。
+     */
+    this.ramp = this.phaseRamp(i);
     this.rampNow = (this.ramp && this.ramp[2]) ? this.ramp : window.HN.RAMP.navy;
+    this.boss.form = Math.min(i, 3);
+    this.boss.accent = this.rampNow;
     this.boss.setMove(ph.move || 'sway', FIELD_W, FIELD_H, G.dif.bmv(G.stage.bossMoveMul ?? 1));
     this.boss.auraTarget = 0.2 + ph.intensity * 0.8;
     this.boss.glassGlint = 0.4;

@@ -464,6 +464,63 @@ function drawBoss(ctx, o) {
     ctx.beginPath(); ctx.arc(0, cy, R, 0, Math.PI * 2); ctx.fill();
   }
 
+  /* --- フェーズ形態（form）--- 
+   * フェーズが進むごとに「地形図の層」が増える。
+   *   1: 等高線リング 1 枚（その人物の輪郭が滲み出す）
+   *   2: リング 2 枚 + 周回する破片
+   *   3: リング 3 枚 + 破片 + 外周の計器リング（＝✝本質✝の記述）
+   * 色はフェーズ固有の accent を使うので、同じボスでも章の進み具合で
+   * 「別の形態」に見える。弾幕の色と揃うため画面の統一感も出る。
+   */
+  const form = o.form ?? 0;
+  const accent = o.accent || aura;
+  if (form > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const cy = 40 * px / 3;
+    for (let i = 0; i < Math.min(form, 3); i++) {
+      const k = i + 1;
+      const wob = 1 + Math.sin(t * (0.9 + k * 0.25) + i * 2.1) * 0.035;
+      const rx = (58 + k * 22) * px / 3 * wob;
+      const ry = (16 + k * 7) * px / 3 * wob;
+      ctx.globalAlpha = 0.20 - i * 0.04;
+      ctx.strokeStyle = i === 0 ? accent : '#fffbe8';
+      ctx.lineWidth = Math.max(1, px * 0.5);
+      ctx.beginPath();
+      ctx.ellipse(0, cy + i * 2, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // 周回する破片（地形図の記号が舞う）
+    const shardN = form >= 3 ? 10 : form >= 2 ? 6 : 0;
+    for (let i = 0; i < shardN; i++) {
+      const a = t * (0.35 + (i % 3) * 0.12) + (i / shardN) * Math.PI * 2;
+      const rr = (72 + (i % 4) * 9) * px / 3;
+      const sx = Math.cos(a) * rr, sy = cy + Math.sin(a) * rr * 0.42;
+      ctx.globalAlpha = 0.42 + 0.28 * Math.sin(t * 2 + i);
+      ctx.fillStyle = i % 2 ? accent : '#fffbe8';
+      const ss = (i % 3 === 0) ? px * 1.4 : px * 0.9;
+      ctx.fillRect(Math.round(sx - ss / 2), Math.round(sy - ss / 2), Math.round(ss), Math.round(ss));
+    }
+    // 最上位形態の外周リング（目盛り付き）
+    if (form >= 3) {
+      const R = 104 * px / 3;
+      ctx.globalAlpha = 0.18;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = Math.max(1, px * 0.5);
+      ctx.beginPath(); ctx.arc(0, cy, R, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.30;
+      for (let i = 0; i < 24; i++) {
+        const a = (i / 24) * Math.PI * 2 - t * 0.12;
+        const r0 = R - px * 0.6, r1 = R + px * (i % 6 === 0 ? 2.4 : 1.1);
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(Math.cos(a) * r1, cy + Math.sin(a) * r1);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   // --- 後光（✝）---
   if (o.halo) {
     const pulse = 0.5 + 0.5 * Math.sin(t * 2.4);
@@ -520,7 +577,8 @@ function drawBoss(ctx, o) {
   const bodyTopY = 8 + headDy + breathe;   // 胴の開始（px 単位）
   if (o.contourBody) {
     // 最終形態: 体が等高線でできている
-    drawContourBody(ctx, px, bodyTopY, o.height ?? 30, o.shoulder ?? 15, t, aura);
+    drawContourBody(ctx, px, bodyTopY, o.height ?? 30, o.shoulder ?? 15, t, accent,
+      o.form ?? 0);
   } else if (o.body === 'cardigan') {
     ctx.save(); ctx.translate(0, bodyTopY * px);
     drawBodyCardigan(ctx, px, { height: o.height ?? 28, shoulder: o.shoulder ?? 14, lean, breathe: 0, waist: 0 });
@@ -564,7 +622,7 @@ function drawBoss(ctx, o) {
  *  ・「間隔が狭い＝傾斜が急」を左右の端で表現し、右肩上がりに詰めていく
  *  ・中央のコアは光るが小さく（弾の視認性を奪わない）
  */
-function drawContourBody(ctx, px, topPx, height, shoulder, t, aura) {
+function drawContourBody(ctx, px, topPx, height, shoulder, t, aura, form = 0) {
   const P = BOSS_PAL;
   ctx.save();
   // 背後の暗いシルエット（線だけだと背景に負けるため、ごく薄く敷く）
@@ -579,8 +637,10 @@ function drawContourBody(ctx, px, topPx, height, shoulder, t, aura) {
   }
   ctx.globalAlpha = 1;
 
-  // 等高線本体（3px ごとに 1px の線）
-  for (let r = 0; r <= height; r += 3) {
+  // 等高線本体。form が上がるほど間隔が詰まる（＝傾斜が急になる）。
+  // 原作の「残り時間が少ないほど密度が上がる」と同じ理屈を、ボスの姿で示す。
+  const step = form >= 3 ? 2 : 3;
+  for (let r = 0; r <= height; r += step) {
     const t01 = r / height;
     let halfW = Math.round(shoulder * Math.sin(Math.min(1, t01 * 1.15) * Math.PI * 0.85) + 3);
     if (t01 > 0.75) halfW = Math.round(halfW * (1 - (t01 - 0.75) * 1.7));
@@ -600,7 +660,7 @@ function drawContourBody(ctx, px, topPx, height, shoulder, t, aura) {
     ctx.fillRect(x0 + wpx - px, y, px, main ? 2 : 1);
 
     // 右側だけ補助線を詰める（等高線の間隔で傾斜を描く）
-    if (!main && r % 6 === 0) {
+    if (!main && r % (form >= 2 ? 4 : 6) === 0) {
       ctx.globalAlpha = 0.30;
       ctx.fillStyle = P.cyan;
       ctx.fillRect(x0, y + 1, Math.round(wpx * 0.62), 1);

@@ -187,12 +187,28 @@ if (res.missing) {
 }
 console.log('  グリフ欠落なし（豆腐は出ません）');
 
-/* ライセンスを同梱する */
-// SRC = .../package/dist/12px/proportional/ja → 4 つ上が package/
-const licSrc = path.resolve(SRC, '../../../../LICENSE');
-const licDst = path.join(ROOT, 'assets/fonts/LICENSE-FusionPixel.txt');
-if (fs.existsSync(licSrc)) {
-  fs.copyFileSync(licSrc, licDst);
-  console.log(`  ライセンスを同梱: ${path.relative(ROOT, licDst)}`);
+/* -------------------------------------------------------- ライセンス同梱 ---
+ *  フォント本体のライセンスは **OFL-1.1**（Fusion Pixel Font / TakWolf）。
+ *  npm パッケージの MIT はビルドツール側のライセンスなので、
+ *  フォントとして再配布するときは OFL の全文を同梱する必要がある。
+ *  合成元（ark-pixel / cubic-11 / galmuri など）の全文も合わせて同梱する。
+ */
+const pkg = path.resolve(SRC, '../../../..');   // .../package
+const copies = [
+  ['LICENSE.font.txt', 'assets/fonts/LICENSE-FusionPixel-OFL.txt'],
+  ['NOTICE.md', 'assets/fonts/NOTICE-FusionPixel.md'],
+];
+for (const [from, to] of copies) {
+  const a = path.join(pkg, from), b = path.join(ROOT, to);
+  if (fs.existsSync(a)) { fs.copyFileSync(a, b); console.log(`  同梱: ${to}`); }
+  else console.warn(`  ! 見つからない: ${from}`);
 }
+const licDir = path.join(pkg, 'LICENSES');
+const licOut = path.join(ROOT, 'assets/fonts/LICENSES-FusionPixel');
+if (fs.existsSync(licDir)) {
+  fs.rmSync(licOut, { recursive: true, force: true });
+  fs.cpSync(licDir, licOut, { recursive: true });
+  console.log('  同梱: assets/fonts/LICENSES-FusionPixel/ （合成元フォントの全文）');
+}
+console.log('  フォント本体のライセンス: SIL OFL 1.1（MIT はパッケージのビルドツール側）');
 console.log('完了');

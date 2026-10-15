@@ -123,6 +123,8 @@ class Boss {
     this.speechT = 0;
     this.emergeFrom = null;
     this.legalT = 0;          // 不変条件の猶予タイマ（検証用）
+    this.form = 0;            // フェーズ段階（0..3）。進むほど装飾が増える
+    this.accent = null;       // フェーズ固有の主色（game.js が設定）
     this.lastDist = undefined;
     this.lastPlayerY = undefined;
   }
@@ -379,6 +381,8 @@ class Boss {
       expr, blink: this.blink, glassGlint: this.glassGlint + Math.sin(this.t * 0.7) * 0.25,
       crossRot: Math.sin(this.t * 0.5) * 0.15,
       crossAlpha: this.pose === 'appear' || this.pose === 'shift' ? 1 : 0.55,
+      form: this.form ?? 0,
+      accent: this.accent || d.aura,
     };
   }
 }

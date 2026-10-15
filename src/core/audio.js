@@ -364,8 +364,11 @@ class AudioEngine {
 
       /* -- 自機 -- */
       case 'graze': // かすり
-        this.noise(t, .035, { hp: 4200, gain: G(.05), bus: b, pan });
-        this.pulse(mtof(96) * R, t, .03, { duty: .125, gain: G(.035), bus: b, pan, a: .001, r: .015 }); break;
+        // 観測ゲージを溜める行為なので、BGM に埋もれない程度には聞こえる必要がある。
+        // ただし 1 弾につき 1 回しか鳴らない（毎フレームではない）ので、
+        // 短いがはっきりした音にしている。
+        this.noise(t, .035, { hp: 4200, gain: G(.11), bus: b, pan });
+        this.pulse(mtof(96) * R, t, .03, { duty: .125, gain: G(.075), bus: b, pan, a: .001, r: .015 }); break;
       case 'hit': // 被弾
         this.noise(t, .22, { lp: 1400, gain: G(.2), bus: b, pan });
         this.pulse(mtof(64) * R, t, .16, { duty: .25, gain: G(.15), bus: b, pan, slide: mtof(33), a: .001, r: .1 });
@@ -403,8 +406,9 @@ class AudioEngine {
         [72, 76, 79, 84, 88].forEach((n, i) => this.bell(mtof(n), t + i * .11, 1.1, { gain: G(.1), bus: b, pan, reverb: .6 })); break;
       case 'gameover':
         [72, 68, 65, 60].forEach((n, i) => this.tri(mtof(n), t + i * .28, .7, { gain: G(.14), bus: b, pan, r: .3 })); break;
-      case 'time_warning': // 残り時間わずか
-        this.pulse(mtof(88), t, .08, { duty: .5, gain: G(.08), bus: b, pan, a: .002, r: .03 }); break;
+      case 'time_warning': // 残り時間わずか（2 回鳴らして気づかせる）
+        this.pulse(mtof(88), t, .09, { duty: .5, gain: G(.15), bus: b, pan, a: .002, r: .03 });
+        this.pulse(mtof(88), t + .16, .09, { duty: .5, gain: G(.15), bus: b, pan, a: .002, r: .03 }); break;
       case 'graze_milestone':
         this.bell(mtof(93), t, .3, { gain: G(.06), bus: b, pan, reverb: .4 }); break;
     }

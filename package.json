@@ -8,12 +8,16 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node tools/run-tests.js",
-    "test:music": "node tools/validate-music.js",
+    "test:full": "node tools/run-tests.js --full",
     "test:patterns": "node tools/test-patterns.js",
     "test:assets": "node tools/validate-assets.js",
+    "test:music": "node tools/validate-music.js",
+    "play": "node tools/playthrough.js --runs 2",
     "frames": "node tools/render-frames.js",
-    "assets": "python3 tools/build-assets.py",
-    "audio:preview": "node tools/render-audio.js"
+    "audio": "node tools/render-audio.js",
+    "audio:sfx": "node tools/render-audio.js --sec 2 --sfx",
+    "build:assets": "python3 tools/build-assets.py",
+    "build:font": "node tools/build-font.js"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.66"

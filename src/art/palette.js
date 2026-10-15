@@ -45,6 +45,20 @@ const STAGE_THEME = {
   boss: { name: '✝', main: RAMP.honshitsu, sub: RAMP.crimson, accent: RAMP.cream, aura: '#f0cf6a', bg: 'contour' },
 };
 
+/**
+ * フェーズごとの配色（ボスの「形態」と弾幕の色を兼ねる）
+ *
+ *  同じボスでも、フェーズが進むごとに色が変わり、姿（form）が変わる。
+ *  第 1 章なら 紺 → えんじ → 生成 → 緋 と、南棟から北棟へ、そして
+ *  ✝本質✝ の光へ近づいていく。色は物語の進み具合そのもの。
+ */
+const PHASE_ACCENT = {
+  1: [RAMP.navy, RAMP.tieEnji, RAMP.cream, RAMP.crimson],
+  2: [RAMP.miso, RAMP.gold, RAMP.orange, RAMP.crimson],
+  3: [RAMP.green, RAMP.cyan, RAMP.magenta, RAMP.honshitsu],
+  4: [RAMP.slate, RAMP.cyan, RAMP.purple, RAMP.honshitsu],
+};
+
 /** 汎用 UI 色 */
 const UI = {
   bg: '#05060c',
@@ -83,4 +97,4 @@ function contrastRatio(a, b) {
 }
 
 window.HN = window.HN || {};
-Object.assign(window.HN, { RAMP, STAGE_THEME, UI_PALETTE: UI, bulletRamp, luminance, contrastRatio });
+Object.assign(window.HN, { RAMP, STAGE_THEME, PHASE_ACCENT, UI_PALETTE: UI, bulletRamp, luminance, contrastRatio });

@@ -46,23 +46,29 @@ const HUD = {
     const timeCol = remain <= 5 ? '#e05575' : remain <= 10 ? '#f0cf6a' : '#e8ecf7';
     const pulse = remain <= 10 ? (0.5 + 0.5 * Math.sin(g.time * (remain <= 5 ? 14 : 8))) : 0;
 
-    const tx = W - 14, ty = 12;
+    /* 縦積みの順序を厳密に固定する（重なりを構造的に防ぐ）:
+     *   「残り」ラベル y=8..18 → 秒数 y=20..54 → 進度バー y=58..63 → フェーズ番号 y=66..78
+     * 以前はラベルと数字を同じ y に右寄せで重ねていたため、数字の末尾と
+     * 「残り」が衝突していた（実フレームで確認）。
+     */
+    const tx = W - 14;
+    const numSize = remain >= 10 ? 32 : 30;
+    // 「残り」ラベル（数字の上・右寄せ）
+    drawText(ctx, '残り', tx, 8, {
+      size: 10, color: '#8b94ad', align: 'right', outline: 2, outlineColor: '#05060c',
+    });
     // 秒数（大きい数字はラテンフォントのピクセル書体）
     const secStr = remain >= 10 ? String(Math.ceil(remain)) : remain.toFixed(1);
     ctx.save();
     ctx.textAlign = 'right';
-    drawText(ctx, secStr, tx, ty, {
-      size: remain >= 10 ? 34 : 30, color: timeCol, align: 'right',
+    drawText(ctx, secStr, tx, 20, {
+      size: numSize, color: timeCol, align: 'right',
       outline: 4, outlineColor: '#05060c', latin: true, bold: true,
-    });
-    // 「残り」ラベル
-    drawText(ctx, '残り', tx - 2, ty + 2, {
-      size: 11, color: '#8b94ad', align: 'right', outline: 2, outlineColor: '#05060c',
     });
     ctx.restore();
 
     // フェーズ進度バー（残り時間の下・右寄せ）
-    const barW = 128, barH = 5, bx = W - 14 - barW, by = ty + 38;
+    const barW = 128, barH = 5, bx = W - 14 - barW, by = 58;
     ctx.save();
     ctx.fillStyle = 'rgba(5,6,12,0.72)';
     ctx.fillRect(bx - 1, by - 1, barW + 2, barH + 2);
@@ -85,7 +91,7 @@ const HUD = {
     }
     // フェーズ番号
     drawText(ctx, `PHASE ${Math.min(g.phaseIndex + 1, g.phaseTotal)} / ${g.phaseTotal}`,
-      W - 14, by + 10, { size: 10, color: '#8b94ad', align: 'right', latin: true, outline: 2 });
+      W - 14, by + 8, { size: 10, color: '#8b94ad', align: 'right', latin: true, outline: 2 });
     ctx.restore();
 
     // 残り時間警告の縁取り

@@ -104,7 +104,7 @@ const CREDITS = {
     { role: '原作テキスト', who: '原作プロジェクト提供' },
   ],
   fonts: [
-    { name: 'Fusion Pixel 12px', by: 'TakWolf / Fusion Pixel Font プロジェクト', license: 'MIT AND SIL OFL 1.1', file: 'assets/fonts/FusionPixel12-japanese.woff2', license_file: 'assets/fonts/LICENSE-FusionPixel.txt', source: 'npm: @vp-tw/cjk-web-fonts-fusion-pixel-font', note: '日本語ピクセルフォント。約物の一部（✝ など）は存在しないためゲーム側でドット字形を自前描画。tools/build-font.js で必要文字のみにサブセット化して同梱。' },
+    { name: 'Fusion Pixel 12px', by: 'TakWolf / Fusion Pixel Font プロジェクト', license: 'SIL Open Font License 1.1（フォント本体）', file: 'assets/fonts/FusionPixel12-japanese.woff2', license_file: 'assets/fonts/LICENSE-FusionPixel-OFL.txt', source: 'Fusion Pixel Font (TakWolf) / npm: @vp-tw/cjk-web-fonts-fusion-pixel-font', note: '日本語ピクセルフォント。OFL-1.1 に基づき必要文字のみにサブセット化した Modified Version として同梱（同梱物の一部に ✝ など存在しない文字があり、それはゲーム側でドット字形を自前描画）。合成元フォントのライセンス全文は assets/fonts/LICENSES-FusionPixel/ に同梱。' },
     { name: 'Silkscreen', by: 'Jason Kottke / The Silkscreen Project Authors', license: 'SIL Open Font License 1.1', file: 'assets/fonts/Silkscreen-*.woff2', license_file: 'assets/fonts/LICENSE-Silkscreen.txt', source: 'npm: @fontsource/silkscreen' },
   ],
   note: '外部素材について: 本作の画像・音声はすべて自作（プロシージャル生成・Web Audio 合成）です。' +
