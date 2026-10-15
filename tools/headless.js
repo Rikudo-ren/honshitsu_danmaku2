@@ -36,8 +36,14 @@ function makeCanvasStub(w = 300, h = 150) {
   const c = { width: w, height: h, style: {}, getContext: () => makeCtxStub() };
   c.getContext = () => { const x = makeCtxStub(); x.canvas = c; return x; };
   c.toDataURL = () => 'data:,';
-  c.addEventListener = () => { };
-  c.removeEventListener = () => { };
+  // 入力の検証（tools/test-input.js）がイベントを発火できるよう、登録された
+  // リスナーを記録する。挙動は変えない。
+  c._listeners = Object.create(null);
+  c.addEventListener = (t, f) => { (c._listeners[t] = c._listeners[t] || []).push(f); };
+  c.removeEventListener = (t, f) => {
+    const a = c._listeners[t]; if (!a) return;
+    const i = a.indexOf(f); if (i >= 0) a.splice(i, 1);
+  };
   c.getBoundingClientRect = () => ({ left: 0, top: 0, width: c.width, height: c.height });
   c.setPointerCapture = () => { };
   return c;
@@ -132,7 +138,7 @@ function createSandbox(extra = {}) {
 
 /** ソース群を順に評価して window.HN を構築する */
 function loadGame(opts = {}) {
-  const { win, ctx } = createSandbox(opts.globals || {});
+  const { win, ctx, listeners } = createSandbox(opts.globals || {});
   const loaded = [];
   for (const rel of (opts.sources || SOURCES)) {
     const p = path.join(ROOT, rel);
@@ -145,7 +151,7 @@ function loadGame(opts = {}) {
       throw new Error(`読み込み失敗 ${rel}: ${e.message}\n${e.stack}`);
     }
   }
-  return { HN: win.HN, win, ctx, loaded };
+  return { HN: win.HN, win, ctx, loaded, listeners };
 }
 
 module.exports = { loadGame, createSandbox, makeCanvasStub, SOURCES, ROOT };

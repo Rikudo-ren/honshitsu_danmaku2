@@ -20,6 +20,87 @@ const HUD = {
   /* --------------------------------------------------------- 初期化 ----- */
   init() { this.banner = null; this.bannerT = 0; this.warnT = 0; },
 
+  /* ------------------------------------------------- タッチ用ボタン ------
+   *  スマホには X キーも Esc も無い。しかし「観測」は本作唯一の干渉手段であり、
+   *  ポーズが無いと中断もできない。そこで画面の内側にこの 2 つだけボタンを置く。
+   *  位置は HUD の文字と重ならない場所を選んでいる（左上＝章名、右上＝残り時間、
+   *  左下＝残機とゲージ、右下＝スコア）ので、左辺の下寄りと右辺の下寄りに置く。
+   *
+   *  押下の判定は Input 側（pointerdown）が行う。ここは座標の定義と描画だけを持つ。
+   *  座標を 1 箇所にまとめているのは、描画と判定がずれないようにするため。
+   */
+  buttonRects() {
+    const W = window.HN.BG_W, H = window.HN.BG_H;
+    return {
+      observe: { x: W - 44, y: H - 62, r: 25 },   // 右下（親指）
+      pause: { x: 27, y: H - 80, r: 16 },          // 左下、残機の上
+    };
+  },
+
+  /** 画面内ボタンの判定。当たったら 'observe' | 'pause'、外れたら null */
+  hitButton(x, y) {
+    const r = this.buttonRects();
+    for (const k of Object.keys(r)) {
+      const b = r[k];
+      if ((x - b.x) * (x - b.x) + (y - b.y) * (y - b.y) <= b.r * b.r) return k;
+    }
+    return null;
+  },
+
+  /** タッチ UI を出すか（タッチが使われた端末、または粗いポインタの端末） */
+  touchUI() { return !!(window.HN.touchUsed || window.HN.coarsePointer); },
+
+  drawTouchButtons(ctx, g) {
+    const { drawCross, clamp } = window.HN;
+    const b = this.buttonRects();
+    const ready = g.gauge >= g.gaugeMax;
+
+    // --- 観測 ---
+    {
+      const o = b.observe;
+      ctx.save();
+      ctx.globalAlpha = 0.30;
+      ctx.fillStyle = '#05060c';
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = ready ? '#f0cf6a' : 'rgba(232,236,247,0.45)';
+      ctx.lineWidth = ready ? 2 : 1;
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke();
+      // ゲージの進み具合を円弧で示す（満タンで光る）
+      const gp = clamp(g.gauge / g.gaugeMax, 0, 1);
+      ctx.strokeStyle = ready ? '#fffbe8' : 'rgba(195,154,60,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r - 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * gp);
+      ctx.stroke();
+      const pl = ready ? 0.5 + 0.5 * Math.sin(g.time * 8) : 0;
+      drawCross(ctx, o.x, o.y, { scale: 1, glow: ready ? 1.2 : 0, pulse: pl, alpha: ready ? 0.95 : 0.5 });
+      // ラベルは円の中ではなく左外側に置く（円の中は ✝ と弧で埋まっている）
+      window.HN.drawText(ctx, '観測', o.x - o.r - 6, o.y - 5, {
+        size: 10, color: ready ? '#f0cf6a' : '#8b94ad', align: 'right',
+        outline: 2, outlineColor: '#05060c',
+      });
+      ctx.restore();
+    }
+
+    // --- ポーズ ---
+    {
+      const o = b.pause;
+      ctx.save();
+      ctx.globalAlpha = 0.30;
+      ctx.fillStyle = '#05060c';
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(232,236,247,0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#c9cfe2';
+      ctx.fillRect(o.x - 4, o.y - 5, 3, 10);
+      ctx.fillRect(o.x + 1, o.y - 5, 3, 10);
+      ctx.restore();
+    }
+  },
+
   /** フェーズ名バナーを表示 */
   showBanner(name, subtitle, dur = 2.4) {
     this.banner = { name, subtitle };
@@ -209,6 +290,11 @@ const HUD = {
       }
       ctx.restore();
     }
+
+    /* ==================== タッチ用ボタン（必要な端末だけ） ============== */
+    // 一番最後に描く。弾幕の上に出るのはこの 2 つだけだが、
+    // 位置を画面の縁に寄せてあるので弾の通り道を塞がない。
+    if (this.touchUI()) this.drawTouchButtons(ctx, g);
   },
 
   /** 短い注記（「フェーズ移行」など） */

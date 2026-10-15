@@ -19,6 +19,8 @@
 const FIELD_W = 640, FIELD_H = 480;
 /** 背景アニメ用の固定 dt（描画からも進める必要がある箇所で使用） */
 const dt0 = () => 1 / 60;
+/** ポーズメニューの項目（描画・入力・タップの当たり判定で同じ配列を使う） */
+const PAUSE_ITEMS = ['再開', '最初から', 'タイトルへ', 'フルスクリーン', 'ミュート'];
 const SAVE_KEY = 'honshitsu.save.v1';
 const OPT_KEY = 'honshitsu.options.v1';
 
@@ -58,6 +60,7 @@ class Game {
     this.titleT = 0;
     this.results = null;
     this.deathT = 0;
+    this.songDuckT = 0;         // 曲の切り替え時に音量を絞っている残り時間
     this.phaseState = 'idle';   // idle|intro|active|shift|clear
     this.phaseStateT = 0;
     this.layers = [];
@@ -90,6 +93,10 @@ class Game {
     this.canvas.height = FIELD_H;
     this.ctx = this.canvas.getContext('2d');
     this.ctx.imageSmoothingEnabled = false;
+    // 粗いポインタ（スマホ・タブレット）ならタッチ用ボタンを最初から出す
+    try {
+      window.HN.coarsePointer = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+    } catch (e) { window.HN.coarsePointer = false; }
 
     const b = window.HN.makeCanvas(FIELD_W, FIELD_H);
     this.buf = b.canvas; this.bctx = b.ctx;
@@ -262,6 +269,7 @@ class Game {
     this.ramp = this.pickRamp();
 
     // 練習モード: 開始フェーズだけの短い挑戦
+    this.practicePhaseIdx = phaseIdx;
     if (mode === 'practice') {
       this.phaseList = [this.stageDef.phases[phaseIdx]];
       G.phaseTotal = 1;
@@ -286,7 +294,10 @@ class Game {
     this.introIdx = -1;
 
     window.HN.audio.resume();
-    window.HN.audio.playSong(G.stage.song, { intensity: 0.0 });
+    /* 章の導入（扉・会話）は静かな曲。会話が終わって戦闘が始まるところで
+     * 章の曲に切り替わるので、「ここから始まる」が音でも分かる。 */
+    const willIntro = (mode !== 'practice') && !this.save.seenIntro[G.stage.key];
+    window.HN.audio.playSong(willIntro ? 'quiet' : G.stage.song, { intensity: willIntro ? 0.35 : 0.0 });
 
     this.setState('ingame');
     G.score = 0;
@@ -381,6 +392,19 @@ class Game {
     this.cam.z = 1.055;
     this.cam.kx = (this.boss.x - FIELD_W / 2) * 0.06;
     this.cam.ky = (this.boss.y - FIELD_H / 2) * 0.06;
+    /* BGM: 最終フェーズだけボス曲（第 4 章は 'final'）に切り替える。
+     * 章のクライマックスで曲が変わることが、そのまま「ここが山場だ」の合図になる。 */
+    /* 練習モードでは phaseList が 1 枚だけなので、i >= length-1 が常に真になる。
+     *  それだと第 1 フェーズの練習でもボス曲が鳴ってしまうため、
+     *  練習中は「章の本当の最終フェーズかどうか」で判定する。 */
+    const isLast = (G.mode === 'practice')
+      ? (this.practicePhaseIdx >= this.stageDef.phases.length - 1)
+      : (i >= this.phaseList.length - 1);
+    if ((isLast || ph.tier === 'final') && G.stage.songBoss && G.stage.songBoss !== G.stage.song) {
+      this.switchSong(G.stage.songBoss, ph.intensity * 0.9);
+    } else if (window.HN.audio.song !== G.stage.song) {
+      this.switchSong(G.stage.song, ph.intensity * 0.8);
+    }
     // フェーズ移行でプレイヤーが理不尽に死なないよう短い保護
     this.player.invuln = Math.max(this.player.invuln, 1.5);
     if (!this.save.seenIntro['q' + G.stage.key + i]) {
@@ -389,9 +413,35 @@ class Game {
     } else this.showQuote = true;
   }
 
+  /**
+   * 曲を切り替える。
+   *
+   *  audio.playSong() は前の曲を止めて即座に次を始める（クロスフェードは無い）。
+   *  そのまま切り替えると、位相が変わる瞬間に音が唐突にブツ切れる。
+   *  そこで「一瞬だけ音楽を絞ってから切り替え、0.7 秒かけて戻す」という
+   *  ダッキングにしてある。曲そのものは切り替わるので、
+   *  「章のクライマックスで曲が変わる」ことが耳で分かる。
+   */
+  switchSong(key, intensity) {
+    const A = window.HN.audio;
+    if (!key || !A.playSong) return;
+    if (A.song === key) { A.setIntensity(intensity); return; }
+    A.setMusicVol(this.opt.musicVol * 0.18);
+    A.playSong(key, { intensity });
+    this.songDuckT = 0.7;
+  }
+
+  /** 絞った音量を戻す（switchSong の後始末） */
+  updateSongDuck(dt) {
+    if (!(this.songDuckT > 0)) return;
+    this.songDuckT -= dt;
+    if (this.songDuckT <= 0) window.HN.audio.setMusicVol(this.opt.musicVol);
+  }
+
   updateIngame(dt) {
     const G_ = G;
     G_.time += dt;
+    this.updateSongDuck(dt);
     G_.runTime += dt;
     window.HN.HUD.update(dt);
 
@@ -640,6 +690,9 @@ class Game {
     const I = this.input;
     if (!I) return;
     this.pollResize();
+    // 画面内ボタン（タッチ端末）はゲーム中とポーズ中だけ有効にする。
+    // メニューでは画面のどこを叩いても「決定」にしたいため。
+    I.touchUI = (G.state === 'ingame' || G.state === 'pause');
     // どの画面でも効くショートカット
     if (I.hit('fullscreen')) window.HN.Fullscreen.toggle();
 
@@ -696,11 +749,19 @@ class Game {
 
   updatePause(dt) {
     const I = this.input;
-    const items = ['再開', '最初から', 'タイトルへ', 'フルスクリーン', 'ミュート'];
+    const items = PAUSE_ITEMS;
     if (I.hit('up')) { this.pauseIdx = (this.pauseIdx + items.length - 1) % items.length; window.HN.audio.sfx('ui_move'); }
     if (I.hit('down')) { this.pauseIdx = (this.pauseIdx + 1) % items.length; window.HN.audio.sfx('ui_move'); }
-    if (I.hit('pause') || I.hit('cancel')) { this.unpause(); window.HN.audio.sfx('ui_back'); return; }
+    /* ポーズを開くのは P / Esc だが、閉じる側に Esc が入っていなかった。
+     *  「P / Esc で再開」と画面にも書いてあるので、Esc でも閉じられるようにする。 */
+    if (I.hit('pause') || I.hit('esc') || I.hit('cancel')) { this.unpause(); window.HN.audio.sfx('ui_back'); return; }
     if (I.hit('confirm')) {
+      // タップで選ぶ（スマホには十字キーが無い）。
+      // 「決定」がポインタ由来なら、指の位置にある項目を選んでから実行する。
+      if (I.lastDevice === 'pointer' && I.ptr.active) {
+        const i = this.pauseItemAt(I.ptr.y);
+        if (i >= 0) this.pauseIdx = i;
+      }
       window.HN.audio.sfx('ui_ok');
       switch (this.pauseIdx) {
         case 0: this.unpause(); break;
@@ -710,6 +771,15 @@ class Game {
         case 4: this.opt.muted = !this.opt.muted; this.writeOpt(); break;
       }
     }
+  }
+
+  /** ポーズメニューの項目の当たり判定（描画と同じ座標から求める） */
+  pauseItemAt(y) {
+    for (let i = 0; i < PAUSE_ITEMS.length; i++) {
+      const iy = 200 + i * 30;
+      if (y >= iy - 4 && y <= iy + 22) return i;
+    }
+    return -1;
   }
 
   drawPaused() {
@@ -724,7 +794,7 @@ class Game {
       size: 30, color: '#fffbe8', align: 'center', outline: 5, latin: true, bold: true,
     });
     drawText(ctx, '— 一時停止 —', FIELD_W / 2, 152, { size: 11, color: '#8b94ad', align: 'center', outline: 3 });
-    const items = ['再開', '最初から', 'タイトルへ', 'フルスクリーン', 'ミュート'];
+    const items = PAUSE_ITEMS;
     items.forEach((it, i) => {
       const sel = i === this.pauseIdx;
       const y = 200 + i * 30;
@@ -738,7 +808,7 @@ class Game {
       if (i === 4) drawText(ctx, this.opt.muted ? 'MUTE' : 'ON', FIELD_W / 2 + 82, y + 1,
         { size: 10, color: '#8b94ad', align: 'center', latin: true, outline: 2 });
     });
-    drawText(ctx, 'P / Esc で再開   F でフルスクリーン', FIELD_W / 2, FIELD_H - 42,
+    drawText(ctx, 'P / Esc で再開   F でフルスクリーン   タップで項目を選ぶ', FIELD_W / 2, FIELD_H - 42,
       { size: 10, color: '#7c86a2', align: 'center', outline: 2 });
     ctx.restore();
     this.present();
@@ -829,12 +899,19 @@ class Game {
   /** 章の扉 → 原作の会話 → 戦闘開始 */
   updateIntro(dt) {
     const I = this.input;
+    this.updateSongDuck(dt);
     // 扉（0.0〜2.2 秒）→ 会話
     if (this.introT == null) this.introT = 0;
     this.introT += dt;
     if (this.phaseState !== 'door' && this.phaseState !== 'talk') {
       this.phaseState = 'door'; this.phaseStateT = 0;
     }
+    /* 扉と会話の経過時間は phaseStateT で数える。
+     *  ++ は updateIngame の中にしか無く、この状態では updateIngame が走らないため、
+     *  ここで進めないと**扉（2.4 秒）から永久に先へ進まない**。
+     *  （新規データで章を始めると、会話に入れず扉の画面で固まっていた。
+     *    tools/test-flow.js がこの不具合を見つけた。） */
+    this.phaseStateT += dt;
     const line = this.intro[this.introIdx];
     if (this.phaseState === 'door' && this.phaseStateT > 2.4) {
       this.phaseState = 'talk'; this.phaseStateT = 0; this.introIdx = 0; this.lineT = 0;
@@ -849,6 +926,7 @@ class Game {
         if (this.introIdx >= this.intro.length) {
           this.phaseState = 'idle';
           this.setState('ingame');
+          this.switchSong(G.stage.song, 0.25);
           this.beginPhase(0);
         } else window.HN.audio.sfx('ui_move');
       }

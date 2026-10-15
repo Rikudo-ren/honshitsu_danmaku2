@@ -33,6 +33,9 @@ const PATH_SAMPLES = 6;     // 経路上の評価点
 const HORIZON = 0.32;       // 1 手の到達時間（秒）
 const INFLUENCE = 260;      // 影響半径(px)。これより遠い弾は「今の判断」に効かせない
 const CELL = 20;            // 危険度マップのセルサイズ(px)
+const GRAZE_BAND = 15;      // 「かすり」を狙う距離帯[px]（これより遠い弾は加点しない）
+const GRAZE_GAP = 2.5;      // これ以下まで寄る経路は加点しない（加点のために死なない）
+const GRAZE_W = 0.55;       // かすりの重み。余裕（worst*2.4）を食わない程度に小さくする
 const BUCKETS = 8;          // 時間バケット数
 const SLICE = 0.11;         // 1 バケットの長さ（秒）→ 合計 0.88 秒先まで
 
@@ -219,6 +222,17 @@ class DodgerAI {
   }
 
   /** ある方向へ 1 手ぶん動いたときの評価（大きいほど安全） */
+  /**
+   * 経路の評価。
+   *
+   *  ④ かすり（グレイズ）への誘導を追加した理由:
+   *   このゲームの「観測」（弾消し＋ボス硬直）は、かすった弾の数で溜まるゲージで撃つ。
+   *   かすりを狙わない AI はゲージが溜まらず、**一度も観測を使えない**（実測 24 回の
+   *   通し検証で 0 回）。観測は人間が普通に使う立て直しの手段なので、それを使えない
+   *   AI は人間より弱く、クリア可否の判定を実際より厳しく見積もってしまう。
+   *   そこで「当たらない範囲で弾に寄る」経路をわずかに加点する。
+   *   GRAZE_GAP 以下まで寄る経路は加点しない（加点のために被弾しないため）。
+   */
   _score(px, py, ang, d, bounds, sys, hitR) {
     const nx0 = ang === null ? px : px + Math.cos(ang) * d;
     const ny0 = ang === null ? py : py + Math.sin(ang) * d;
@@ -228,7 +242,7 @@ class DodgerAI {
 
     // ---- ① 経路の余裕 ----
     const near = this._near(sys, px, py);
-    let worst = 1e9, acc = 0, cnt = 0;
+    let worst = 1e9, acc = 0, cnt = 0, graze = 0;
     for (let s = 0; s <= PATH_SAMPLES; s++) {
       const t = s / PATH_SAMPLES;
       const cx = px + (nx - px) * t;
@@ -245,6 +259,8 @@ class DodgerAI {
       }
       if (m < worst) worst = m;
       acc += m; cnt++;
+      // ---- ④ かすりの誘導（当たらない範囲でだけ）----
+      if (m > GRAZE_GAP && m < GRAZE_BAND) graze += (GRAZE_BAND - m);
     }
     const avg = acc / Math.max(1, cnt);
 
@@ -267,8 +283,10 @@ class DodgerAI {
     const edge = Math.min(nx - bounds.x0, ny - bounds.y0, bounds.x1 - nx, bounds.y1 - ny);
     const edgePen = edge < 26 ? (26 - edge) * 0.55 : 0;
 
-    // 余裕を主軸、マップを「読み」として加算する
-    return worst * 2.4 + avg * 0.9 - danger * 210 - edgePen - blocked * 2.0;
+    // 余裕を主軸、マップを「読み」として加算する。かすりは最後に少量だけ足す。
+    const grazeAvg = graze / Math.max(1, cnt);
+    return worst * 2.4 + avg * 0.9 - danger * 210 - edgePen - blocked * 2.0
+      + grazeAvg * GRAZE_W;
   }
 
   /**

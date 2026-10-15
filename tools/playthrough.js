@@ -19,6 +19,7 @@
  *    node tools/playthrough.js --verbose
  * ========================================================================== */
 'use strict';
+const fs = require('fs');
 const { loadGame } = require('./headless');
 const { DodgerAI } = require('./dodger-ai');
 
@@ -215,6 +216,10 @@ function runOne(rec) {
   rec.time = t;
   rec.hits = hits;
   rec.observations = G.observations;
+  rec.graze = G.graze;
+  // 残機は G ではなくこの run の値を記録する。
+  // G は run をまたいで共有されるので、そのまま表示すると全行が最後の run の値になる。
+  rec.lives = G.lives;
   rec.reached = G.phaseIndex + 1;
   rec.maxCount = Math.max(rec.maxCount, game.sys.count);
   rec.ok = (rec.state === 'results' || rec.state === 'allclear') && G.lives >= 0;
@@ -223,8 +228,14 @@ function runOne(rec) {
 }
 
 /* ------------------------------------------------------------ 出力 ---- */
+/* 進捗を都度出す。パイプ（| tee）に繋ぐと Node の stdout はブロック単位で
+ * バッファされるため、console.log だけだと 30 分間なにも表示されず
+ * 「止まっているのか動いているのか」が分からない。1 行ずつ書いて flush する。 */
+const say = (line) => { try { fs.writeSync(1, line + '\n'); } catch (e) { console.log(line); } };
+
 const HEAD = ['難易度'.padEnd(8), '章'.padEnd(4), '結果'.padEnd(12), '生存'.padEnd(9),
-  '残機'.padEnd(5), '被弾'.padEnd(5), '観測'.padEnd(5), '最大弾'.padEnd(8), '最大弾速'.padEnd(9)].join('');
+  '残機'.padEnd(5), '被弾'.padEnd(5), 'かすり'.padEnd(7), '観測'.padEnd(5),
+  '最大弾'.padEnd(8), '最大弾速'.padEnd(9)].join('');
 console.log('通し検証: 回避AIに全フェーズを生存させ、STAGE CLEAR に到達できるかを確認');
 console.log('（AI はゲームの入力系を通して操作。移動・当たり判定は本番コード）');
 console.log('-'.repeat(96));
@@ -232,29 +243,32 @@ console.log(HEAD);
 console.log('-'.repeat(96));
 
 for (const r of rows) {
-  const d = HN.DIFFICULTY[r.dk];
   const label = r.ok ? 'STAGE CLEAR' : (r.state === 'gameover' ? 'GAME OVER' : (r.state || '中断'));
-  console.log(
+  say(
     r.dk.padEnd(8) +
     String(r.stage).padEnd(4) +
     label.padEnd(12) +
     (r.time.toFixed(1) + 's').padEnd(9) +
-    String(HN.G.lives).padEnd(5) +
+    String(r.lives).padEnd(5) +
     String(r.hits).padEnd(5) +
+    String(r.graze ?? 0).padEnd(7) +
     String(r.observations).padEnd(5) +
     String(r.maxCount).padEnd(8) +
     String(Math.round(r.maxSpeed)).padEnd(9) +
     (r.ok ? 'OK' : 'NG')
   );
-  if (r.error) console.log(`      → ${r.error}`);
-  if (VERBOSE && r.hitsAt.length) console.log(`      被弾時刻: ${r.hitsAt.join(', ')}`);
+  if (r.error) say(`      → ${r.error}`);
+  if (r.hitsAt && r.hitsAt.length && (!r.ok || VERBOSE)) {
+    for (const h of r.hitsAt) say(`      被弾: ${h}`);
+  }
+  if (VERBOSE && r.hitsAt.length) say(`      被弾時刻: ${r.hitsAt.join(', ')}`);
 }
 
 const ng = rows.filter(r => !r.ok || r.error);
-console.log('-'.repeat(96));
-console.log(`合計 ${rows.length} 件 / NG ${ng.length} 件`);
+say('-'.repeat(96));
+say(`合計 ${rows.length} 件 / NG ${ng.length} 件`);
 if (ng.length) {
-  console.log('\nNG 一覧:');
-  for (const r of ng) console.log(`  ${r.dk} 第${r.stage}章  到達 PHASE ${r.reached}/${r.diffPhases}  ${r.error || '未クリア'}`);
+  say('\nNG 一覧:');
+  for (const r of ng) say(`  ${r.dk} 第${r.stage}章  到達 PHASE ${r.reached}/${r.diffPhases}  ${r.error || '未クリア'}`);
 }
 process.exit(anyFail ? 1 : 0);

@@ -18,7 +18,9 @@
     "audio:sfx": "node tools/render-audio.js --sec 2 --sfx",
     "build:assets": "python3 tools/build-assets.py",
     "build:font": "node tools/build-font.js",
-    "test:fairness": "node tools/test-fairness.js"
+    "test:fairness": "node tools/test-fairness.js",
+    "test:input": "node tools/test-input.js",
+    "test:flow": "node tools/test-flow.js"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^0.1.66"

@@ -508,6 +508,33 @@ if (want('ui') || want('camera') || want('all')) {
     HN.HUD.draw(game.bctx, G);
     game.present();
   }]);
+
+  /* タッチ端末用の画面内ボタン。弾幕の上に出る唯一の UI なので、
+   * 実際に HUD の上へ描いた状態を撮って、弾の視認性を損なわないか確かめる。 */
+  shots.push(['57-touchui', () => {
+    game.startRun('NORMAL', 0, 'story');
+    G.state = 'ingame'; game.phaseState = 'idle'; game.beginPhase(1);
+    const prev = HN.touchUsed; HN.touchUsed = true;
+    const d = new (require('./dodger-ai').DodgerAI)(G.dif);
+    const t0 = G.time;
+    game.dodger = d;
+    simulate(6.0);
+    game.drawWorld();
+    HN.HUD.draw(game.bctx, G);
+    game.present();
+    HN.touchUsed = prev;
+  }]);
+
+  /* ポーズ画面（タップで項目を選ぶ注記つき） */
+  shots.push(['58-pause-touch', () => {
+    game.startRun('NORMAL', 0, 'story');
+    G.state = 'ingame'; game.phaseState = 'idle'; game.beginPhase(1);
+    const prev = HN.touchUsed; HN.touchUsed = true;
+    simulate(2.0);
+    game.paused = true; game.pauseIdx = 2;
+    game.drawPaused();
+    HN.touchUsed = prev;
+  }]);
 }
 
 /* --- 密度テスト: わざと最密状態を作って視認性を確かめる --- */

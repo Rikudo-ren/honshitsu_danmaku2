@@ -23,12 +23,14 @@ const suite = [
   ['楽曲データ', 'tools/validate-music.js', false],
   ['弾幕パターン（全 21 種 × 3 難易度）', 'tools/test-patterns.js', false],
   ['公平性の不変条件（ボスの最小距離）', 'tools/test-fairness.js', false],
+  ['入力（キーボード / タッチ / 画面内ボタン）', 'tools/test-input.js', false],
+  ['画面遷移と BGM', 'tools/test-flow.js', false],
 ];
 
 if (FULL) {
   suite.push(['通しクリア検証（全 4 章 × 3 難易度 / 各 2 回）',
     ['tools/playthrough.js', '--runs', '2'], true]);
-  suite.push(['フレーム描画（46 枚）', 'tools/render-frames.js', true]);
+  suite.push(['フレーム描画（49 枚）', 'tools/render-frames.js', true]);
   suite.push(['音声の波形検査', ['tools/render-audio.js', '--sec', '4', '--sfx'], true]);
 }
 

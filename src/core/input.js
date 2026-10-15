@@ -22,10 +22,18 @@ class Input {
     this.keys = Object.create(null);      // 押下中
     this.pressed = Object.create(null);   // このフレームで押された
     this.released = Object.create(null);  // このフレームで離された
-    this.ptr = { x: 0, y: 0, active: false, down: false, dx: 0, dy: 0, id: -1, isTouch: false };
+    this.ptr = {
+      x: 0, y: 0, active: false, down: false, dx: 0, dy: 0, id: -1, isTouch: false,
+      // 2 本目の指。スマホには Shift が無いので、ドラッグ中にもう 1 本置くと
+      // 集中（低速・精密）モードになる。
+      second: false, secondId: -1,
+    };
     this.pointerMoved = false;
     this.anyInput = false;
     this.lastDevice = 'keyboard';
+    /* ゲーム中だけ画面内ボタンを有効にする（game.js が毎フレーム設定する）。
+     * タイトルやメニューでは画面のどこを叩いても「決定」にしたいため。 */
+    this.touchUI = false;
     this._bind();
   }
 
@@ -46,7 +54,10 @@ class Input {
       this.keys[a] = false;
       this.released[a] = true;
     });
-    addEventListener('blur', () => { this.keys = Object.create(null); this.ptr.down = false; });
+    addEventListener('blur', () => {
+      this.keys = Object.create(null);
+      this.ptr.down = false; this.ptr.second = false; this.ptr.secondId = -1;
+    });
 
     const c = this.canvas;
     const toLocal = (ev) => {
@@ -58,8 +69,31 @@ class Input {
     };
 
     c.addEventListener('pointerdown', (ev) => {
-      if (this.ptr.down) return;
+      // 既にドラッグ中なら 2 本目の指 = 集中モード（タッチのみ）
+      if (this.ptr.down) {
+        if (ev.pointerType === 'touch') { this.ptr.second = true; this.ptr.secondId = ev.pointerId; }
+        return;
+      }
       const p = toLocal(ev);
+
+      /* 画面内ボタン（タッチ端末のみ）。
+       *  スマホには X キー（観測）も Esc（ポーズ）も無いため、HUD が描く
+       *  2 つのボタンをここで拾う。押した瞬間に該当アクションを立て、
+       *  ドラッグは開始しない（ボタンの上から指を滑らせても自機は動かない）。 */
+      if (ev.pointerType === 'touch') {
+        window.HN.touchUsed = true;
+        if (this.touchUI && window.HN.HUD && window.HN.HUD.hitButton) {
+          const btn = window.HN.HUD.hitButton(p.x, p.y);
+          if (btn) {
+            this.pressed[btn === 'observe' ? 'cancel' : 'pause'] = true;
+            this.ptr.x = p.x; this.ptr.y = p.y; this.ptr.active = true;
+            this.ptr.btnTap = true;
+            this.anyInput = true; this.lastDevice = 'pointer';
+            return;
+          }
+        }
+      }
+
       this.ptr.x = p.x; this.ptr.y = p.y;
       this.ptr.active = true; this.ptr.down = true;
       this.ptr.id = ev.pointerId; this.ptr.isTouch = ev.pointerType === 'touch';
@@ -82,6 +116,13 @@ class Input {
       }
     });
     const up = (ev) => {
+      // 2 本目の指が離れたら集中モードを解除する（移動ドラッグは続く）
+      if (this.ptr.second && (ev.pointerId === undefined || ev.pointerId === this.ptr.secondId)) {
+        this.ptr.second = false; this.ptr.secondId = -1;
+        return;
+      }
+      // ボタンへのタップは決定にしない（ボタンを押しただけでメニューが進むのを防ぐ）
+      if (this.ptr.btnTap) { this.ptr.btnTap = false; this.ptr.active = false; return; }
       if (ev.pointerId !== undefined && ev.pointerId !== this.ptr.id) return;
       // 軽いタップは決定として扱う
       if (this.ptr.down) this.pressed.confirm = true;
@@ -102,6 +143,7 @@ class Input {
     this.released = Object.create(null);
     this.ptr.dx = 0; this.ptr.dy = 0;
     this.pointerMoved = false;
+    this.ptr.btnTap = false;
   }
 
   down(a) { return !!this.keys[a]; }
@@ -129,11 +171,20 @@ class Input {
     return { x, y, active: x !== 0 || y !== 0 };
   }
 
+  /**
+   * 集中（低速・精密）モード中か。
+   *
+   *  · キーボード: Shift を押している間
+   *  · ゲームパッド: L1 / L2
+   *  · タッチ: ドラッグ中の 2 本目の指
+   *    （実機のタッチパネルで確認できないため、判定はここに集約しておき
+   *      tools/test-input.js で入力イベントから検証できるようにしている）
+   */
   focusHeld() {
     if (this.down('focus')) return true;
     const pads = navigator.getGamepads ? navigator.getGamepads() : null;
     if (pads) for (const p of pads) if (p && (p.buttons[6]?.pressed || p.buttons[4]?.pressed)) return true;
-    if (this.ptr.down && !this.ptr.isTouch) return false;
+    if (this.ptr.second) return true;
     return false;
   }
 }
