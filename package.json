@@ -1,0 +1,21 @@
+{
+  "name": "honshitsu-danmaku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "✝本質✝ — 耐久型ドット絵弾幕ゲーム（原作小説『偏差値60の教室から✝本質✝が漏れ出している件について』より）",
+  "license": "SEE LICENSE IN docs/CREDITS.md",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node tools/run-tests.js",
+    "test:music": "node tools/validate-music.js",
+    "test:patterns": "node tools/test-patterns.js",
+    "test:assets": "node tools/validate-assets.js",
+    "frames": "node tools/render-frames.js",
+    "assets": "python3 tools/build-assets.py",
+    "audio:preview": "node tools/render-audio.js"
+  },
+  "devDependencies": {
+    "@napi-rs/canvas": "^0.1.66"
+  }
+}

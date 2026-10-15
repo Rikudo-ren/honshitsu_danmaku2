@@ -1,0 +1,19 @@
+# 依存（npm install で復元。リポジトリには含めない）
+node_modules/
+package-lock.json
+
+# 開発用の中間生成物（最終成果物ではない）
+_work/
+*.log
+
+# 生成されたフレーム検証画像
+_work/frames/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 原作素材（小説本文・立ち絵）。ゲームの実行には不要で、57MB あるため git には入れない。
+# ゲーム用に加工済みの画像は assets/ にあり、そちらを配布する。
+# 再生成する場合は tools/build-assets.py を参照（google_drive/ が必要）。
+google_drive/*.png

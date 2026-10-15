@@ -1,0 +1,182 @@
+{
+  "ryoma": {
+    "name": "両馬二郎",
+    "source": "chr_ryoma_01_tsuujou.png",
+    "cutin": [
+      263,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "terachi": {
+    "name": "寺地星",
+    "source": "chr_terachi_01_nemusou.png",
+    "cutin": [
+      273,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "satou": {
+    "name": "砂糖東洋",
+    "source": "chr_satou_01_game_gyoushi.png",
+    "cutin": [
+      232,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "mie": {
+    "name": "三重県臣",
+    "source": "chr_mie_01_reishou.png",
+    "cutin": [
+      260,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "rei": {
+    "name": "零",
+    "source": "chr_rei_01_suzushii.png",
+    "cutin": [
+      241,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "kuraishi": {
+    "name": "倉石暁",
+    "source": "chr_kuraishi_01_nekkyou.png",
+    "cutin": [
+      229,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "katsuya": {
+    "name": "塀勝也",
+    "source": "chr_katsuya_01_tsuujou.png",
+    "cutin": [
+      268,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "mitsumine": {
+    "name": "三峰",
+    "source": "chr_mitsumine_01_tsuujou.png",
+    "cutin": [
+      212,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "meshino": {
+    "name": "召野カイト",
+    "source": "chr_meshino_01_tsuujou.png",
+    "cutin": [
+      231,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "sakura": {
+    "name": "櫻優",
+    "source": "chr_sakura_02_kenkyuusha.png",
+    "cutin": [
+      223,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "naitou": {
+    "name": "内藤蘭",
+    "source": "chr_naitou_01_tsuujou.png",
+    "cutin": [
+      244,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "izumi": {
+    "name": "伊豆見",
+    "source": "chr_izumi_02_egao.png",
+    "cutin": [
+      245,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "izaki": {
+    "name": "伊崎",
+    "source": "chr_izaki_01_tsuujou.png",
+    "cutin": [
+      247,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "futami": {
+    "name": "二見",
+    "source": "chr_futami_01_tsuujou.png",
+    "cutin": [
+      198,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  },
+  "inaba": {
+    "name": "稲葉",
+    "source": "chr_inaba_01_furushashin_hohoemi.png",
+    "cutin": [
+      275,
+      320
+    ],
+    "face": [
+      48,
+      48
+    ]
+  }
+}

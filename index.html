@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#05060c">
+  <meta name="description"
+    content="✝本質✝ — 耐久型ドット絵弾幕ゲーム。原作小説『偏差値60の教室から✝本質✝が漏れ出している件について』より翻案。">
+  <title>✝本質✝ — 耐久型弾幕ゲーム</title>
+  <style>
+    /* ------------------------------------------------------------------
+       画面構成: 640×480 の論理解像度を、端末に合わせて最近傍拡大する。
+       ピクセルアートの輪郭を守るため、拡大は必ず整数比に近い形で行い、
+       補間は全面的に切る。
+       ------------------------------------------------------------------ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #05060c;
+      color: #e8ecf7;
+      font-family: "FusionPixel12", "Hiragino Kaku Gothic ProN", "Noto Sans JP", monospace;
+      touch-action: none;
+      overscroll-behavior: none;
+    }
+
+    body {
+      position: fixed;
+      inset: 0;
+      display: block;
+      /* 画面外に少しだけ「余白」を作る。真っ黒だと端末の縁で弾が見えにくい。 */
+      background:
+        radial-gradient(ellipse at 50% 45%, #0b0e19 0%, #05060c 62%, #04050a 100%);
+    }
+
+    #game {
+      position: absolute;
+      display: block;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      -ms-interpolation-mode: nearest-neighbor;
+      background: #05060c;
+      outline: none;
+      cursor: crosshair;
+      /* 影で画面の外枠をはっきりさせ、弾の視認領域を限定する */
+      box-shadow: 0 0 0 1px rgba(240, 207, 106, 0.14), 0 0 42px rgba(0, 0, 0, 0.9);
+      touch-action: none;
+    }
+
+    /* 初回タップを促すオーバーレイ（自動再生ポリシー対策） */
+    #gate {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: rgba(5, 6, 12, 0.94);
+      z-index: 10;
+      text-align: center;
+      padding: 24px;
+      transition: opacity .35s ease;
+    }
+
+    #gate.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #gate h1 {
+      font-size: min(11vw, 46px);
+      letter-spacing: .10em;
+      font-weight: 400;
+      color: #fffbe8;
+      text-shadow: 0 0 18px rgba(240, 207, 106, .35);
+    }
+
+    #gate .sub {
+      font-size: min(3.6vw, 13px);
+      color: #8b94ad;
+      line-height: 1.9;
+    }
+
+    #gate .quote {
+      font-size: min(3.2vw, 11px);
+      color: #6f7893;
+      line-height: 1.9;
+      max-width: 34em;
+    }
+
+    #gate .start {
+      margin-top: 6px;
+      padding: 13px 34px;
+      border: 1px solid rgba(240, 207, 106, .55);
+      color: #f0cf6a;
+      font-size: min(4.4vw, 15px);
+      letter-spacing: .18em;
+      background: rgba(240, 207, 106, .06);
+      cursor: pointer;
+      animation: breathe 2.6s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 rgba(240, 207, 106, 0);
+      }
+
+      50% {
+        box-shadow: 0 0 22px rgba(240, 207, 106, .22);
+      }
+    }
+
+    #gate .cross {
+      font-size: min(13vw, 58px);
+      color: #f0cf6a;
+      line-height: 1;
+      text-shadow: 0 0 26px rgba(240, 207, 106, .55);
+    }
+
+    #gate small {
+      font-size: 10px;
+      color: #4d5670;
+      line-height: 1.8;
+      max-width: 36em;
+    }
+
+    /* 回転を促す注意（縦持ちスマホのみ） */
+    #rotate {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 12;
+      background: #05060c;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 30px;
+      color: #8b94ad;
+      font-size: 14px;
+      line-height: 2;
+    }
+
+    @media (orientation: portrait) and (max-width: 560px) {
+      #rotate {
+        display: flex;
+      }
+    }
+
+    /* タッチ端末ではカーソルを消す */
+    @media (hover: none) {
+      #game {
+        cursor: default;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- 縦持ち時に横向きを促す（横持ちでも遊べるが、横のほうが弾が見やすい） -->
+  <div id="rotate">
+    <div>
+      端末を<b>横向き</b>にすると、より遊びやすくなります。<br>
+      <span style="font-size:11px;color:#5a6480">そのままでも遊べます（タップで続行）</span>
+    </div>
+  </div>
+
+  <canvas id="game" width="640" height="480" tabindex="0"></canvas>
+
+  <!-- 音声の自動再生ポリシー対策の入口。ここを 1 回タップさせてから AudioContext を起こす。 -->
+  <div id="gate">
+    <div class="cross">✝</div>
+    <h1>本質</h1>
+    <div class="sub">耐久型 ドット絵 弾幕ゲーム</div>
+    <div class="quote">
+      「✝本質✝も等高線みたいなもので、直接は見えないけど、<br>
+      何かのサインを読むと存在がわかる」
+    </div>
+    <button class="start" id="startBtn">は じ め る</button>
+    <div class="quote" style="color:#5a6480">
+      攻撃はできません。右上の残り秒数が尽きるまで、避け続けてください。
+    </div>
+    <small>
+      原作: 「偏差値60の教室から✝本質✝が漏れ出している件について」<br>
+      本作は同作の世界観・登場人物・象徴を基に翻案した二次創作ゲームです。<br>
+      フォント: Fusion Pixel 12px (TakWolf / MIT AND OFL 1.1), Silkscreen (SIL OFL 1.1)
+    </small>
+  </div>
+
+  <!-- ===================================================================
+       読み込み順は依存順。tools/headless.js の SOURCES と同一に保つこと。
+       =================================================================== -->
+  <script src="src/core/util.js"></script>
+  <script src="src/core/input.js"></script>
+  <script src="src/core/audio.js"></script>
+  <script src="src/audio/music.js"></script>
+
+  <script src="src/art/palette.js"></script>
+  <script src="src/art/glyph.js"></script>
+  <script src="src/art/bullets.js"></script>
+  <script src="src/art/sprites.js"></script>
+  <script src="src/art/render.js"></script>
+  <script src="src/art/characters.js"></script>
+  <script src="src/art/bosses.js"></script>
+  <script src="src/art/backgrounds.js"></script>
+  <script src="src/art/effects.js"></script>
+
+  <script src="src/game/difficulty.js"></script>
+  <script src="src/game/bulletsys.js"></script>
+  <script src="src/game/patterns.js"></script>
+  <script src="src/game/player.js"></script>
+  <script src="src/game/boss.js"></script>
+  <script src="src/game/stages.js"></script>
+
+  <script src="src/data/script.js"></script>
+  <script src="src/ui/hud.js"></script>
+  <script src="src/ui/screens.js"></script>
+  <script src="src/game/game.js"></script>
+
+  <script>
+    /* ---------------------------------------------------------------
+       起動処理
+       --------------------------------------------------------------- */
+    (function () {
+      'use strict';
+      const FONT_BASE = 'assets/fonts/';
+      const gate = document.getElementById('gate');
+      const startBtn = document.getElementById('startBtn');
+      let started = false;
+
+      function fit() {
+        const g = window.HN && window.HN.game;
+        if (g) g.resize();
+      }
+
+      async function start() {
+        if (started) return;
+        started = true;
+        gate.classList.add('hidden');
+        setTimeout(() => { gate.style.display = 'none'; }, 400);
+
+        const A = window.HN.audio;
+        A.resume();
+
+        // フォント（OFL 同梱。取得元はクレジット画面に明記）
+        try {
+          await window.HN.Fonts.load({
+            // Fusion Pixel 12px（MIT / OFL 1.1）— tools/build-font.js で生成
+            jp: FONT_BASE + 'FusionPixel12-japanese.woff2',
+            latin: FONT_BASE + 'Silkscreen-latin-400.woff2',
+            latinBold: FONT_BASE + 'Silkscreen-latin-700.woff2',
+          });
+        } catch (e) { console.warn('font', e); }
+
+        // ゲーム本体
+        const game = new window.HN.Game();
+        window.HN.game = game;
+        window.HN.Screens.reset(['title']);
+        game.boot();
+        window.addEventListener('resize', fit);
+        document.getElementById('game').focus();
+      }
+
+      startBtn.addEventListener('click', start);
+      startBtn.addEventListener('touchend', (e) => { e.preventDefault(); start(); }, { passive: false });
+      // 回転注意のタップで閉じる
+      const rot = document.getElementById('rotate');
+      rot.addEventListener('click', () => { rot.style.display = 'none'; });
+      rot.addEventListener('touchend', (e) => { e.preventDefault(); rot.style.display = 'none'; }, { passive: false });
+
+      // ビルド簡易検証: 主要モジュールが揃っているか
+      window.addEventListener('error', (e) => {
+        console.error('[honshitsu] error:', e.message, e.filename, e.lineno);
+        if (!started) {
+          startBtn.textContent = '読み込みエラー（コンソール参照）';
+          startBtn.style.color = '#e05575';
+          startBtn.style.borderColor = 'rgba(224,85,117,.6)';
+        }
+      });
+    })();
+  </script>
+</body>
+
+</html>
