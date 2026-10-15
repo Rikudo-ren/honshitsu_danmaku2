@@ -1,0 +1,17 @@
+{
+  "name": "honshitsu-danmaku",
+  "version": "1.0.0",
+  "private": true,
+  "description": "耐久型ドット絵弾幕ゲーム『偏差値60の教室から✝本質✝が漏れ出している件について 弾幕篇』",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "assets:sfx": "node tools/gen_sfx.mjs",
+    "assets:portraits": "python3 tools/make_portraits.py"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}

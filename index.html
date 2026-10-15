@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#07060c" />
+<title>✝本質✝弾幕 — 偏差値60の教室から✝本質✝が漏れ出している件について</title>
+<style>
+  :root { color-scheme: dark; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #07060c;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #app {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(ellipse at 50% 40%, #16122a 0%, #0a0812 55%, #050409 100%);
+  }
+  #screen {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    background: #050409;
+    box-shadow: 0 0 0 1px #2a2440, 0 0 60px rgba(120, 90, 220, 0.20);
+    touch-action: none;
+  }
+  /* ローディング */
+  #boot {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    font-family: "DotGothic16", "MS Gothic", monospace;
+    color: #b9a8ff; font-size: 15px; letter-spacing: 0.12em;
+    background: #07060c; z-index: 10;
+    transition: opacity .45s ease;
+  }
+  #boot.hidden { opacity: 0; pointer-events: none; }
+  #boot .title { font-size: 26px; color: #efe6ff; text-shadow: 0 0 22px #8a5cff; }
+  #boot .bar { width: 260px; height: 6px; background: #1b1730; overflow: hidden; }
+  #boot .bar > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg,#7a4dff,#ff6fd8); }
+  #boot .hint { font-size: 12px; color: #6f649b; }
+</style>
+</head>
+<body>
+  <div id="app"><canvas id="screen"></canvas></div>
+  <div id="boot">
+    <div class="title">✝本質✝</div>
+    <div class="bar"><i id="bootbar"></i></div>
+    <div id="bootmsg">初期化中…</div>
+    <div class="hint">クリック / タップで音声を有効化</div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
