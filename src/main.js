@@ -500,7 +500,7 @@ class Game {
     // 弾 / レーザー
     const bounds = { x0: -48, x1: VIEW_W + 48, y0: -80, y1: VIEW_H + 80 };
     this.bullets.update(dt, { player: this.player, difficulty: this.diff, bounds, camera: this.cam });
-    this.lasers.update(dt);
+    this.lasers.update(dt, { camera: this.cam });
 
     // 自機
     this.player.update(dt, inp, { difficulty: this.diff, camera: this.cam });

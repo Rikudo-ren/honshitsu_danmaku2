@@ -60,8 +60,9 @@ export class Lasers {
     return l;
   }
 
-  update(dt) {
+  update(dt, opts = {}) {
     const p = this.player;
+    const cam = opts.camera ?? this.camera ?? null;
     for (const l of this.list) {
       if (!l.alive) continue;
       l.t += dt;
@@ -108,18 +109,43 @@ export class Lasers {
       // ビーム本体の当たり判定 (fire 状態のみ)
       if (l.state === 'fire' && p && p.alive && p.vulnerable) {
         const count = l.count ?? 1;
+        const use3D = cam && cam.active;
         for (let c = 0; c < count; c++) {
           const ang = l.angle + (count > 1 ? (c - (count - 1) / 2) * l.spread : 0);
-          const d = this._distToRay(p.x, p.y, l.x, l.y, ang, l.length);
-          const half = l.width / 2;
-          if (d < half + p.radius) { p.onHit(null, 'laser'); break; }
-          if (!l._grazeMark && d < half + p.grazeRadius) {
+          let d, half, rad, graze;
+          if (use3D) {
+            // 擬似3D: 描画と同じく投影後のスクリーン座標で判定する。
+            // (ワールド座標で判定すると、見えている位置と当たりがずれる)
+            const a = cam.project(l.x, l.y, l.z ?? 0);
+            const b = cam.project(l.x + Math.cos(ang) * l.length, l.y + Math.sin(ang) * l.length, l.z ?? 0);
+            const pp = cam.project(p.x, p.y, p.z ?? 0);
+            if (a.behind || b.behind || pp.behind) continue;
+            d = this._distToSeg(pp.sx, pp.sy, a.sx, a.sy, b.sx, b.sy);
+            const sc = (a.scale + b.scale) / 2;
+            half = (l.width / 2) * sc;
+            rad = p.radius * Math.max(0.5, pp.scale);
+            graze = p.grazeRadius * Math.max(0.5, pp.scale);
+          } else {
+            d = this._distToRay(p.x, p.y, l.x, l.y, ang, l.length);
+            half = l.width / 2;
+            rad = p.radius;
+            graze = p.grazeRadius;
+          }
+          if (d < half + rad) { p.onHit(null, 'laser'); break; }
+          if (!l._grazeMark && d < half + graze) {
             l._grazeMark = true;   // 1 本につき 1 回だけグレイズ
             this.fx?.spawn(p.x, p.y, { vx: 0, vy: -30, life: 0.3, size: 2, color: '#7cf0ff', add: true });
           }
         }
       }
     }
+  }
+
+  _distToSeg(px, py, ax, ay, bx, by) {
+    const vx = bx - ax, vy = by - ay;
+    const L2 = vx * vx + vy * vy || 1;
+    const t = clamp(((px - ax) * vx + (py - ay) * vy) / L2, 0, 1);
+    return Math.hypot(px - (ax + vx * t), py - (ay + vy * t));
   }
 
   _distToRay(px, py, ox, oy, angle, len) {

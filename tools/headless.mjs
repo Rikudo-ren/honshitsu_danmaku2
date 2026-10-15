@@ -17,6 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VIEW_W, VIEW_H } from '../src/core/const.js';
 import { createCanvas, Image as NImage, ImageData as NImageData, GlobalFonts } from '@napi-rs/canvas';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -279,7 +280,7 @@ async function simulate(scene, o) {
   for (let i = 0; i < Math.round((stage.boss.intro?.dur ?? 2.0) * 60); i++) { boss.update(dt); t += dt; }
 
   while (t < limit) {
-    if (bot) steerBot(scene, dt);
+    if (bot) (process.env.BOT === 'old' ? steerBot : steerLook)(scene, dt);
     boss.update(dt);
     if (t < limit - 0.6) { S.t = t; runner.update(dt, S); events += 1; }
     scene.bullets.update(dt, {
@@ -287,10 +288,19 @@ async function simulate(scene, o) {
       bounds: { x0: -48, x1: VIEW_W + 48, y0: -80, y1: VIEW_H + 80 },
       camera: scene.cam,
     });
-    scene.lasers.update(dt);
+    scene.lasers.update(dt, { camera: scene.cam });
     scene.player.update(dt, scene.sim, { difficulty: diff, camera: scene.cam });
     if (prevAlive && !scene.player.alive) {
       hits += 1;
+      if (process.env.DEBUG_HITS) {
+        const pl = scene.player;
+        const near = scene.bullets.list.filter((b) => b.alive || b._hitRecent)
+          .map((b) => ({ d: Math.hypot(b.x - pl.x, b.y - pl.y), type: b.type, color: b.color, z: +(b.z ?? 0).toFixed(0), vz: +(b.vz ?? 0).toFixed(0), r: b.r }))
+          .sort((a, b) => a.d - b.d).slice(0, 3);
+        const lz = scene.lasers.list.filter((l) => l.alive && l.state === 'fire')
+          .map((l) => ({ x: +l.x.toFixed(0), y: +l.y.toFixed(0), ang: +(l.angle * 180 / Math.PI).toFixed(0), len: l.length, w: l.width, origin: l.origin, count: l.count ?? 1 }));
+        console.log(`  [hit ${hits}] t=${t.toFixed(2)} phase=${phaseIndex + 1} pos=(${pl.x.toFixed(0)},${pl.y.toFixed(0)}) nearest=`, JSON.stringify(near), 'firingLasers=', JSON.stringify(lz));
+      }
       if (hits > diff.lives) { deaths = 1; break; }
       scene.bullets.clear();
       scene.lasers.clear();
@@ -364,6 +374,101 @@ function steerBot(scene, dt) {
   const m = Math.hypot(fx, fy) || 1;
   scene.sim.axis.x = fx / m;
   scene.sim.axis.y = fy / m;
+  scene.sim.focused = false;
+}
+
+/**
+ * 先読みボット: 9 方向 (停止含む) の候補位置を、0.7 秒先の弾位置 (等速近似) で評価する。
+ * 弾の当たり半径 + 自機半径より近い候補は大きく減点。画面外・警告線も減点。
+ * 同点の時は画面中央下寄りを選ぶ。
+ */
+function steerLook(scene, dt) {
+  const p = scene.player;
+  if (!p.alive) { scene.sim.axis.x = 0; scene.sim.axis.y = 0; return; }
+  const H = 0.7, STEP = 0.1;
+  const PLAYER_R_HINT = 2 + 4;   // 自機の当たり半径の目安 (+ 余裕)
+  const speed = 150;                    // 通常移動の目安 (px/s)
+  const bl = scene.bullets.list.filter((b) => b.alive);
+  const lasers = scene.lasers.list.filter((l) => l.alive);
+  // 3D 中は当たり判定がスクリーン座標 (投影後) なので、ボットも投影で予測する
+  const cam = scene.cam && scene.cam.active ? scene.cam : null;
+  const proj = (x, y, z) => {
+    if (!cam) return { sx: x, sy: y, scale: 1 };
+    const q = cam.project(x, y, z ?? 0);
+    return { sx: q.sx, sy: q.sy, scale: q.scale ?? 1, behind: q.behind };
+  };
+  const dirs = [[0,0],[1,0],[-1,0],[0,1],[0,-1],[.707,.707],[-.707,.707],[.707,-.707],[-.707,-.707]];
+  let best = null, bestScore = -Infinity;
+  for (const [dx, dy] of dirs) {
+    const nx = clampf(p.x + dx * speed * H * 0.6, 24, VIEW_W - 24);
+    const ny = clampf(p.y + dy * speed * H * 0.6, 40, VIEW_H - 24);
+    let minClear = 1e9;
+    // 0..H を STEP 刻みで評価
+    for (let t = 0; t <= H + 1e-6; t += STEP) {
+      const px = p.x + (nx - p.x) * (t / H), py = p.y + (ny - p.y) * (t / H);
+      const pq = proj(px, py, p.z ?? 0);
+      // 発射中のビームは時刻 t の角度 (回転) で評価する
+      for (const l of lasers) {
+        if (l.state !== 'fire') continue;
+        const cnt = l.count ?? 1;
+        for (let c = 0; c < cnt; c++) {
+          const a = (l.angle + (l.spin || 0) * t) + (cnt > 1 ? (c - (cnt - 1) / 2) * l.spread : 0);
+          const ex = l.x + Math.cos(a) * l.length, ey = l.y + Math.sin(a) * l.length;
+          let d, half;
+          if (cam) {
+            const A = proj(l.x, l.y, l.z ?? 0), B = proj(ex, ey, l.z ?? 0);
+            if (A.behind || B.behind) continue;
+            const vx = B.sx - A.sx, vy = B.sy - A.sy, L2 = vx * vx + vy * vy || 1;
+            const q = clampf(((pq.sx - A.sx) * vx + (pq.sy - A.sy) * vy) / L2, 0, 1);
+            d = Math.hypot(pq.sx - (A.sx + vx * q), pq.sy - (A.sy + vy * q));
+            half = (l.width / 2) * ((A.scale + B.scale) / 2);
+          } else {
+            const dx = Math.cos(a), dy = Math.sin(a);
+            const tt = clampf((px - l.x) * dx + (py - l.y) * dy, 0, l.length);
+            d = Math.hypot(px - (l.x + dx * tt), py - (l.y + dy * tt));
+            half = l.width / 2;
+          }
+          const gap = d - half - PLAYER_R_HINT * (cam ? pq.scale : 1);
+          if (gap < minClear) minClear = gap;
+        }
+      }
+      for (const b of bl) {
+        const bq = proj(b.x + b.vx * t, b.y + b.vy * t, (b.z ?? 0) + (b.vz ?? 0) * t);
+        const rr = (b.r ?? 4) * bq.scale + (PLAYER_R_HINT) * pq.scale;
+        const d = Math.hypot(pq.sx - bq.sx, pq.sy - bq.sy) - rr;
+        if (d < minClear) minClear = d;
+      }
+    }
+    let score = 0;
+    if (minClear < 0) score -= 1000 + (-minClear) * 20; // 当たる
+    else score += Math.min(minClear, 60) * 2;           // 余裕
+    for (const l of lasers) {
+      const ang = l.angle;
+      const cnt = l.count ?? 1;
+      for (let c = 0; c < cnt; c++) {
+        const a = ang + (cnt > 1 ? (c - (cnt - 1) / 2) * l.spread : 0);
+        const ex = l.x + Math.cos(a) * l.length, ey = l.y + Math.sin(a) * l.length;
+        let d, half;
+        if (cam) {
+          const A = proj(l.x, l.y, l.z ?? 0), B = proj(ex, ey, l.z ?? 0), P = proj(nx, ny, p.z ?? 0);
+          if (A.behind || B.behind) continue;
+          const vx = B.sx - A.sx, vy = B.sy - A.sy, L2 = vx * vx + vy * vy || 1;
+          const t = clampf(((P.sx - A.sx) * vx + (P.sy - A.sy) * vy) / L2, 0, 1);
+          d = Math.hypot(P.sx - (A.sx + vx * t), P.sy - (A.sy + vy * t));
+          half = (l.width / 2) * ((A.scale + B.scale) / 2);
+        } else {
+          d = Math.abs(Math.sin(a) * (nx - l.x) - Math.cos(a) * (ny - l.y));
+          half = l.width / 2;
+        }
+        if (l.state !== 'fire' && d < half + 22) score -= (half + 22 - d) * 12;   // 警告線は避ける
+      }
+    }
+    score -= Math.hypot(nx - VIEW_W / 2, ny - VIEW_H * 0.75) * 0.02;
+    if (dx === 0 && dy === 0) score += 2;                 // 同点ならじっとする
+    if (score > bestScore) { bestScore = score; best = [dx, dy]; }
+  }
+  scene.sim.axis.x = best[0];
+  scene.sim.axis.y = best[1];
   scene.sim.focused = false;
 }
 const clampf = (v, a, b) => (v < a ? a : v > b ? b : v);
