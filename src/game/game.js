@@ -72,6 +72,11 @@ class Game {
     this.showArchiveFrom = 'title';
     this.lastFrame = 0;
     this.autoPaused = false;
+    /* カメラ（演出用）。フィールド全体にだけ掛かり、HUD には掛けない。
+     *   z は 1 以上にしかならない（1 未満にすると画面の端に黒い隙間が出る）。
+     * ここ（constructor）で初期化する。boot() に置くと、boot() を呼ばずに
+     * Game を組み立てる検証環境（render-frames / playthrough）で未定義になる。 */
+    this.cam = { z: 1, kx: 0, ky: 0 };
   }
 
   /* =========================================================== 起動 ==== */
@@ -369,6 +374,13 @@ class Game {
     this.fx.phaseShift(this.boss.x, this.boss.y, this.ramp, G.stage.accent || '#fffbe8');
     this.bg.flashScreen(G.stage.accent || '#fffbe8', 0.35);
     this.bg.pulseOnce();
+    /* カメラワーク: フェーズの切り替わりで一度だけ寄る（1.1 秒かけて戻す）。
+     * 引いた状態から戻すのではなく「寄る」方向にするのは、
+     * 寄ると視野が狭まって弾が見えにくくなるため（可読性優先）。
+     * ここで寄りを入れると、ボスが予備動作に入る瞬間に視線が自然に集まる。 */
+    this.cam.z = 1.055;
+    this.cam.kx = (this.boss.x - FIELD_W / 2) * 0.06;
+    this.cam.ky = (this.boss.y - FIELD_H / 2) * 0.06;
     // フェーズ移行でプレイヤーが理不尽に死なないよう短い保護
     this.player.invuln = Math.max(this.player.invuln, 1.5);
     if (!this.save.seenIntro['q' + G.stage.key + i]) {
@@ -414,6 +426,15 @@ class Game {
       }
     } else if (this.phaseState === 'clear') {
       if (this.phaseStateT >= 3.4) this.finishStage();
+    }
+
+    /* ---- カメラ（演出）---- */
+    if (this.cam.z > 1.0005 || this.cam.kx || this.cam.ky) {
+      const k = Math.min(1, dt * 3.0);
+      this.cam.z += (1 - this.cam.z) * k;
+      this.cam.kx += (0 - this.cam.kx) * k;
+      this.cam.ky += (0 - this.cam.ky) * k;
+      if (Math.abs(this.cam.z - 1) < 0.0005) { this.cam.z = 1; this.cam.kx = 0; this.cam.ky = 0; }
     }
 
     /* ---- ボスの更新 ---- */
@@ -1172,13 +1193,31 @@ class Game {
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#05060c';
     ctx.fillRect(0, 0, FIELD_W, FIELD_H);
+    // カメラ: フェーズ開始の寄り。弾の可読性を損なわない範囲（最大 5.5%）に制限する。
+    const cam = this.cam;
+    // save/restore の対応を構造的に保証するため、条件は 1 度だけ評価して変数に持つ
+    const camOn = cam.z > 1.0005 || cam.kx !== 0 || cam.ky !== 0;
+    if (camOn) {
+      ctx.save();
+      ctx.translate(FIELD_W / 2, FIELD_H / 2);
+      ctx.scale(cam.z, cam.z);
+      ctx.translate(-FIELD_W / 2 + cam.kx, -FIELD_H / 2 + cam.ky);
+    }
     this.bg.draw(ctx);
-    // 描画順: 予告線 → 弾 → レーザー光条 → 予告マーカー → ボス → 自機
-    // ボスは弾の「奥」に立たせ、弾が必ず前面に残るようにする。
-    window.HN.Render.drawField(ctx, this.sys, G.time);
+    /* 描画順（後から描くものほど手前）:
+     *   背景 → ボス → 予告線 → 弾グロー → 弾コア → レーザー → 予告マーカー
+     *        → 自機 → エフェクト
+     *
+     * ボスは必ず**弾より奥**に置く。逆にすると、ボスの体と、ボスの後ろに敷いている
+     * 暗い下地（alpha 0.62）が弾を隠してしまい、見えない弾に当たる事故になる。
+     * 弾の視認性はこのゲームで最も優先される性質なので、ボスの見栄えより優先する。
+     * ボス自身が弾に隠れてしまう問題は、後光（加算合成）と輪郭で担保している。
+     */
     this.boss.draw(ctx, G.time);
+    window.HN.Render.drawField(ctx, this.sys, G.time);
     if (this.deathT <= 0) this.player.draw(ctx);
     this.fx.draw(ctx);
+    if (camOn) ctx.restore();
     // 低速時はフィールド全体を落として集中を促す
     if (this.player.focusT > 0.02) {
       ctx.save();

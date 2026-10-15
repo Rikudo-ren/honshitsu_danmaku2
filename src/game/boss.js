@@ -123,6 +123,8 @@ class Boss {
     this.speechT = 0;
     this.emergeFrom = null;
     this.legalT = 0;          // 不変条件の猶予タイマ（検証用）
+    this.pushX = 0;           // 押し戻しの蓄積量（絶対座標運動でも消えないように）
+    this.pushY = 0;
     this.form = 0;            // フェーズ段階（0..3）。進むほど装飾が増える
     this.accent = null;       // フェーズ固有の主色（game.js が設定）
     this.lastDist = undefined;
@@ -258,48 +260,85 @@ class Boss {
      *   自機が自分から画面上部へ突っ込むのはプレイヤーの選択であり、
      *   「上に行くと危険」は弾幕ゲームの基本の駆け引きなので妨げない。
      * ・この下限は「ボスの可動域」の中で必ず満たせる必要がある。
-     *   ボスの可動域は y ∈ [H*0.12, H*0.42] なので、自機が y = H*0.50 に居るときの
-     *   縦距離は最大 H*0.50 - H*0.12 = 182.4px。したがって MIN_D = 140 なら
-     *   常に「真上へ逃げ切れる」余裕（42.4px）がある。170 にすると
-     *   自機が y ≒ H*0.45 付近に居るとき満たせず、クランプと喧嘩して破れる。
-     * ・押し戻しは 1 フレーム MAX_STEP px までに制限し、瞬間移動に見せない。
+     *   可動域は y ∈ [H*0.12, H*0.42] なので、自機が y = H*0.50 に居るときの
+     *   縦距離の最大は H*0.50 - H*0.12 = 182.4px。したがって MIN_D = 140 なら
+     *   常に「真上へ逃げ切れる」余裕（42.4px）がある。170 では自機が
+     *   y ≒ H*0.45 付近に居るとき満たせず、クランプと喧嘩して破れる。
+     * ・押し戻しは 1 フレーム MAX_STEP px まで。瞬間移動には見せない。
      *   最も厳しいケース（自機 y=H*0.50 の真下、ボスが降下して y=H*0.42）でも
-     *   必要な退避量は 201.6-140+... ≒ 101px = 17 フレーム = 0.28 秒で済む。
-     *   playthrough.js は 0.6 秒の猶予後にだけ不変条件を検証する。
+     *   必要な退避量は約 101px = 17 フレーム = 0.28 秒。playthrough.js は
+     *   0.6 秒の猶予のあとにだけ不変条件を検証する。
+     *
+     * 実装上の要点（ここを外すと不変条件が破れる）:
+     *   sway / lissajous / figure8 は **位置を絶対座標で代入する**
+     *   （this.x = homeX + sin(...)）。したがって押し戻しを位置に足すだけでは
+     *   次のフレームで上書きされて消える。押し戻しは pushX/pushY に
+     *   蓄積しておき、毎フレーム運動のあとに加算する。
+     *   これをしないと、運動の引き戻しと押し戻しが釣り合って
+     *   MIN_D の少し内側で止まり、実測 137〜138px で不変条件が破れた。
+     *   また、目標を MIN_D + HYST に取ることで、運動が引き戻す分
+     *   （最大で毎フレーム約 1.5px）を見込んでも MIN_D を割らない。
      */
     if (sys && sys.player) {
-      const MIN_D = 140;      // 自機の中心とボスの中心の最小距離[px]
-      const MAX_STEP = 6;     // 1 フレームの最大退避量[px] = 6*60 = 360px/s
+      const MIN_D = 140;       // 自機の中心とボスの中心の最小距離[px]
+      const HYST = 8;          // 目標を少し外側に取る（運動の引き戻し分の余裕）
+      const TARGET = MIN_D + HYST;
+      const MAX_STEP = 6;      // 1 フレームの最大退避量[px] = 360px/s
       const inZone = sys.player.y > this.H * 0.5;
-      // 猶予タイマ: 自機が上に居る／ボスが出題移動中のときは 0 に戻す
-      if (!inZone || this.pose === 'appear' || this.pose === 'shift') this.legalT = 0;
-      else this.legalT += dt;
+
+      /* 自機が「歩いて行けない距離」を 1 フレームで動いた場合
+       * （被弾後の復帰位置・章の開始位置など）は、ボスが近づいたのではなく
+       * 自機が飛ばされたので、猶予をリセットして退避の時間を与える。
+       * 自機の通常速度は約 4px/フレームなので 16px を閾値にする。
+       */
+      const pdx = sys.player.x - (this._lastPX ?? sys.player.x);
+      const pdy = sys.player.y - (this._lastPY ?? sys.player.y);
+      const teleported = Math.hypot(pdx, pdy) > 16;
+      this._lastPX = sys.player.x; this._lastPY = sys.player.y;
+
+      if (!inZone || this.pose === 'appear' || this.pose === 'shift' || teleported) {
+        this.legalT = 0;                       // 猶予をリセット
+        this.pushX *= 0.9; this.pushY *= 0.9;  // 押し戻しを徐々に戻す
+      } else {
+        this.legalT += dt;
+      }
+
+      // 蓄積した押し戻しを位置へ反映する
+      this.x += this.pushX; this.y += this.pushY;
+      this.x = window.HN.clamp(this.x, this.W * 0.16, this.W * 0.84);
+      this.y = window.HN.clamp(this.y, this.H * 0.12, this.H * 0.42);
 
       if (inZone) {
-        let dx = this.x - sys.player.x, dy = this.y - sys.player.y;
-        let d = Math.hypot(dx, dy);
-        if (d < MIN_D && d > 1e-4) {
-          const step = Math.min(MIN_D - d, MAX_STEP);
-          this.x += (dx / d) * step;
-          this.y += (dy / d) * step;
-        }
-        // 画面内拘束（ボスの可動域）
-        const box = () => {
+        const dx = this.x - sys.player.x, dy = this.y - sys.player.y;
+        const d = Math.max(1e-4, Math.hypot(dx, dy));
+        if (d < TARGET) {
+          const step = Math.min(TARGET - d, MAX_STEP);
+          const ox = (dx / d) * step, oy = (dy / d) * step;
+          this.pushX += ox; this.pushY += oy;
+          // 押し戻しが大きくなりすぎないように制限する（挙動が不自然にならない範囲）
+          const pm = Math.hypot(this.pushX, this.pushY);
+          if (pm > 150) { this.pushX *= 150 / pm; this.pushY *= 150 / pm; }
+          this.x += ox; this.y += oy;
           this.x = window.HN.clamp(this.x, this.W * 0.16, this.W * 0.84);
           this.y = window.HN.clamp(this.y, this.H * 0.12, this.H * 0.42);
-        };
-        box();
-        // クランプで押し戻されて距離が足りない場合の逃げ道:
-        //   ① 自機から遠い側の水平端へ寄る ② それでも足りなければ真上へ
-        let d2 = Math.hypot(this.x - sys.player.x, this.y - sys.player.y);
-        if (d2 < MIN_D) {
-          const side = sys.player.x <= this.x ? 1 : -1;
-          this.x = window.HN.clamp(
-            this.x + side * Math.min(MIN_D - d2, MAX_STEP), this.W * 0.16, this.W * 0.84);
-          d2 = Math.hypot(this.x - sys.player.x, this.y - sys.player.y);
+          // クランプで戻された分は、横方向へ逃がす
+          const d2 = Math.hypot(this.x - sys.player.x, this.y - sys.player.y);
           if (d2 < MIN_D) {
-            this.y = Math.max(this.H * 0.12, this.y - Math.min(MIN_D - d2, MAX_STEP));
+            const side = sys.player.x <= this.x ? 1 : -1;
+            const sx = window.HN.clamp(this.x + side * Math.min(MIN_D - d2, MAX_STEP),
+              this.W * 0.16, this.W * 0.84);
+            this.pushX += sx - this.x; this.x = sx;
+            const d3 = Math.hypot(this.x - sys.player.x, this.y - sys.player.y);
+            if (d3 < MIN_D) {
+              const sy = Math.max(this.H * 0.12, this.y - Math.min(MIN_D - d3, MAX_STEP));
+              this.pushY += sy - this.y; this.y = sy;
+            }
           }
+        } else if (d > TARGET + 24) {
+          // 十分に離れたら押し戻しを戻して元の軌道へ帰す。
+          // TARGET 直上で戻し始めると「押す→戻す」が振動するので、
+          // 24px の不感帯を置いて静止させる。
+          this.pushX *= 0.96; this.pushY *= 0.96;
         }
       }
       // 検証用: ボス自身の移動直後の距離を記録する。

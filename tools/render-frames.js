@@ -441,7 +441,7 @@ if (want('bg') || want('all')) {
 }
 
 /* --- 一時停止・ゲームオーバー・リザルト --- */
-if (want('ui') || want('all')) {
+if (want('ui') || want('camera') || want('all')) {
   shots.push(['50-pause', () => {
     game.startRun('HARD', 1, 'story');
     G.state = 'ingame'; game.phaseState = 'idle'; game.beginPhase(1);
@@ -495,6 +495,17 @@ if (want('ui') || want('all')) {
     game.drawWorld();
     HN.HUD.draw(game.bctx, G);
     game.drawQuote();
+    game.present();
+  }]);
+
+  /* フェーズ移行のカメラワーク。beginPhase 直後の 1 フレームを撮る
+   * （simulate するとカメラが戻ってしまうため、ここだけは進めない）。 */
+  shots.push(['56-camera', () => {
+    game.startRun('NORMAL', 3, 'story');
+    G.state = 'ingame'; game.phaseState = 'idle';
+    game.beginPhase(3);
+    game.drawWorld();
+    HN.HUD.draw(game.bctx, G);
     game.present();
   }]);
 }
